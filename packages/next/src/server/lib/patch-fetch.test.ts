@@ -119,39 +119,42 @@ describe('createPatchedFetcher', () => {
     // timeout when we regress and buffer the response.
   }, 1000)
 
-  it('passes an internal fetch through as is', async () => {
-    setSpanRecorderForTest((span) => spanRecords.push(span))
+  // the action handler passes `internal: 1` for its own requests to the
+  // server: the redirect's RSC fetch and the forward to another worker
+  it.each([1, true])(
+    'passes an internal fetch through as is (internal: %p)',
+    async (internal) => {
+      setSpanRecorderForTest((span) => spanRecords.push(span))
 
-    const mockFetch: jest.MockedFunction<typeof fetch> = jest.fn()
-    mockFetch.mockResolvedValue(new Response('ok'))
+      const mockFetch: jest.MockedFunction<typeof fetch> = jest.fn()
+      mockFetch.mockResolvedValue(new Response('ok'))
 
-    const workAsyncStorage = new AsyncLocalStorage<WorkStore>()
-    const patchedFetch = createPatchedFetcher(mockFetch, {
-      workAsyncStorage,
-      workUnitAsyncStorage: new AsyncLocalStorage<WorkUnitStore>(),
-    })
+      const workAsyncStorage = new AsyncLocalStorage<WorkStore>()
+      const patchedFetch = createPatchedFetcher(mockFetch, {
+        workAsyncStorage,
+        workUnitAsyncStorage: new AsyncLocalStorage<WorkUnitStore>(),
+      })
 
-    const workStore: Partial<WorkStore> = {
-      page: '/',
-      route: '/',
-      shouldTrackFetchMetrics: true,
+      const workStore: Partial<WorkStore> = {
+        page: '/',
+        route: '/',
+        shouldTrackFetchMetrics: true,
+      }
+
+      const init = { next: { internal } } as RequestInit
+
+      await workAsyncStorage.run(workStore as WorkStore, async () => {
+        await patchedFetch('https://example.com/page', init)
+      })
+
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch.mock.calls[0][1]).toBe(init)
+      expect(workStore.fetchMetrics).toBeUndefined()
+      expect(
+        spanRecords.map((span) => span.attributes?.['next.span_type'])
+      ).not.toContain('AppRender.fetch')
     }
-
-    // what the action handler passes for its own requests to the server:
-    // the redirect's RSC fetch and the forward to another worker
-    const init = { next: { internal: 1 } } as RequestInit
-
-    await workAsyncStorage.run(workStore as WorkStore, async () => {
-      await patchedFetch('https://example.com/page', init)
-    })
-
-    expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(mockFetch.mock.calls[0][1]).toBe(init)
-    expect(workStore.fetchMetrics).toBeUndefined()
-    expect(
-      spanRecords.map((span) => span.attributes?.['next.span_type'])
-    ).not.toContain('AppRender.fetch')
-  })
+  )
 
   it('records fetch outcome attributes on local AppRender.fetch spans', async () => {
     setSpanRecorderForTest((span) => spanRecords.push(span))
