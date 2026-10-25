@@ -202,3 +202,32 @@ describe('normalizeDynamicRouteParams', () => {
     })
   })
 })
+
+describe('reuse across requests', () => {
+  it('keeps no state of one request for the next', () => {
+    const utils = getServerUtils({
+      page: '/blog/[slug]/[[...rest]]',
+      basePath: '',
+      rewrites: {},
+      i18n: undefined,
+      pageIsDynamic: true,
+      caseSensitive: false,
+    })
+    const defaultRouteMatches = structuredClone(utils.defaultRouteMatches)
+    const groups = structuredClone(utils.defaultRouteRegex!.groups)
+
+    const first = utils.normalizeDynamicRouteParams(
+      utils.dynamicRouteMatcher!('/blog/a/x/y') || {},
+      true
+    )
+    const second = utils.normalizeDynamicRouteParams(
+      utils.dynamicRouteMatcher!('/blog/b') || {},
+      true
+    )
+
+    expect(first.params).toEqual({ slug: 'a', rest: ['x', 'y'] })
+    expect(second.params).toEqual({ slug: 'b' })
+    expect(utils.defaultRouteMatches).toEqual(defaultRouteMatches)
+    expect(utils.defaultRouteRegex!.groups).toEqual(groups)
+  })
+})

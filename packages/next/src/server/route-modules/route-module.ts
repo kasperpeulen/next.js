@@ -171,8 +171,8 @@ export abstract class RouteModule<
 
   /**
    * The server utils of the last request, built again only when the page or
-   * the routes manifest changes. Outside of development the manifest is loaded
-   * once, so they are built once.
+   * the routes manifest changes. In the Node.js runtime outside of development
+   * the manifest is loaded once, so they are built once.
    */
   private serverUtils?: {
     srcPage: string
