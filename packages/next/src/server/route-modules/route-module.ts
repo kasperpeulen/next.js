@@ -169,6 +169,17 @@ export abstract class RouteModule<
   public incrementCache?: IncrementalCache
   public responseCache?: ResponseCache
 
+  /**
+   * The server utils of the last request, built again only when the page or
+   * the routes manifest changes. In the Node.js runtime outside of development
+   * the manifest is loaded once, so they are built once.
+   */
+  private serverUtils?: {
+    srcPage: string
+    routesManifest: DeepReadonly<DevRoutesManifest>
+    utils: ReturnType<typeof getServerUtils>
+  }
+
   constructor({
     userland,
     definition,
@@ -943,15 +954,25 @@ export abstract class RouteModule<
     // the pathname format (e.g., /app/[slug]).
     const normalizedSrcPage = normalizeAppPath(srcPage)
 
-    const serverUtils = getServerUtils({
-      page: normalizedSrcPage,
-      i18n,
-      basePath,
-      rewrites,
-      pageIsDynamic,
-      trailingSlash: process.env.__NEXT_TRAILING_SLASH as any as boolean,
-      caseSensitive: Boolean(routesManifest.caseSensitive),
-    })
+    if (
+      this.serverUtils?.srcPage !== srcPage ||
+      this.serverUtils.routesManifest !== routesManifest
+    ) {
+      this.serverUtils = {
+        srcPage,
+        routesManifest,
+        utils: getServerUtils({
+          page: normalizedSrcPage,
+          i18n,
+          basePath,
+          rewrites,
+          pageIsDynamic,
+          trailingSlash: process.env.__NEXT_TRAILING_SLASH as any as boolean,
+          caseSensitive: Boolean(routesManifest.caseSensitive),
+        }),
+      }
+    }
+    const serverUtils = this.serverUtils.utils
 
     const domainLocale = detectDomainLocale(
       i18n?.domains,
